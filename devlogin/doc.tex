@@ -1,0 +1,57 @@
+\subsection{Exploit des \texttt{devlogin}}
+Bei Agent Smith handelt es sich noch nicht um den root-Benutzer, es ist also eine weitere Privilegienerhöhung notwendig.
+Nach kurzer Untersuchung des Dateisystems kann das Verzeichnis \texttt{/opt/devlogin} identifiziert werden, welches speziell der Gruppe der \texttt{agents}, die Gruppe des eingeloggten Benutzers, gehört.
+
+Die Berechtigungen im Verzeichnis sind wie folgt gesetzt:
+\begin{lstlisting}
+dr-xr-x---    1 dev      agents        4096 Jul  1 23:48 .
+drwxr-xr-x    1 root     root          4096 Jul  1 23:48 ..
+-r-sr-x---    1 dev      agents       28008 Jul  1 23:33 devlogin
+-r--r-----    1 dev      agents        1126 Jul  1 23:33 devlogin.cpp
+\end{lstlisting}
+
+Es liegt die setuid-Binary \texttt{devlogin} vor, welche bei der Ausführung die effektive UID auf die des Nutzers \texttt{dev} setzt.
+Das Programm fragt nach Ausführung nach einem Benutzernamen und einem Passwort.
+Ein kurzer Blick in den zugehörigen Quellcode verrät, dass der \texttt{devlogin} eine \texttt{dev}-Shell gibt, wenn die Zugangsdaten korrekt sind:
+\lstinputlisting[linerange={36-44},firstnumber=36]{devlogin/devlogin.cpp}
+
+Zudem kann aus dem Quellcode der beim Login gewünschte Benutzername (ebenfalls \texttt{dev}) sowie der MD5-Hash des Passworts (\texttt{14754f13e5280c5d49d2ae536c2d57e2}) entnommen werden.
+Es lässt sich schnell ermitteln, dass das Passwort \texttt{machine} lautet.
+
+Jedoch stellt man bei Eingabe dieser Zugangsdaten fest, dass immer noch keine Shell erzeugt wurde; das Problem:
+Die Funktion, die zum hexadezimalen Kodieren des Passworthashes verwendet wurde, erzeugt einen Hexstring in Großbuchstaben und mit einem Doppelpunkt als Trennzeichen zwischen den Oktetten.
+Der Zielhash hingegen ist in Kleinbuchstaben ohne Trennzeichen hinterlegt.
+Es gibt also keine Möglichkeit, dass die Hexstrings identisch sein können.
+Für eine Privilegienerhöhung muss also ein anderer Weg gefunden werden.
+
+Im Rahmen der Challenge ist ein Exploit via \texttt{LD\_PRELOAD}-Umgebungsvariable vorgesehen, die den dynamischen Linker dazu bringt, eine benutzerdefinierte Bibliothek zu laden.
+Zufälligerweise ist im Docker-Image bereits ein C-Compiler vorinstalliert, sodass die Bibliothek direkt im Container selbst erzeugt werden kann.
+Dazu wird eine C-Datei \texttt{inject.c} mit folgendem Inhalt angelegt (\hbox{z. B.} im \texttt{/tmp}-Verzeichnis mit \texttt{vi}):
+\lstinputlisting[language=C,linerange={1-8}]{devlogin/ld_preload.txt}
+
+Die \texttt{\_init}-Funktion wird aufgerufen, sobald die dynamische Library geladen wurde, und ersetzt den aktuellen Prozess durch eine Shell.
+Das \texttt{unsetenv} stellt lediglich sicher, dass die Bibliothek nicht in einer Endlosschleife sich selbst lädt.
+Anschließend wird der Code mit folgendem Befehl in eine dynamische Bibliothek kompiliert:
+\lstinputlisting[linerange={10}]{devlogin/ld_preload.txt}
+
+Die Privilegienerhöhung erfolgt anschließend durch setzen von \texttt{LD\_PRELOAD} auf die kompilierte Bibliothek vor der Ausführung des \texttt{devlogin}-Programms:
+\begin{lstlisting}
+$ id
+uid=1000(smith) gid=1000(agents) groups=27(video),1000(agents),1000(agents)
+$ LD_PRELOAD=/tmp/inject.so ./devlogin
+$ id
+uid=1002(dev) gid=1000(agents) groups=27(video),1000(agents),1000(agents)
+\end{lstlisting}
+
+Mit Shell-Zugriff zum \texttt{dev}-Benutzer kann auch das nächste Token unter \texttt{/home/dev/token.txt} gelesen werden:
+\lstinputlisting{tokens/token3}
+
+Nun ist es verwunderlich, dass \texttt{LD\_PRELOAD} auf einer setuid-Binary funktioniert, wie das Token auch andeutet.
+Tatsächlich wird die eigene Bibliothek nicht in den \texttt{devlogin} injiziert, sondern in den Kindprozess, der in Zeile~18 erzeugt wird:
+\lstinputlisting[language=C,linerange={13-19},firstnumber=13]{devlogin/devlogin.cpp}
+Das Docker-Image ist ein musl-basiertes System, d.h. alle Binaries benutzen den dynamischen Musl-Linker.
+Dies kann über den \texttt{file}-Befehl auf der Binary verifiziert werden.
+Anders als der GNU dynamische Linker\footnote{\url{https://github.com/bminor/glibc/blob/master/sysdeps/generic/unsecvars.h\#L22}} löscht musl \textbf{nicht} die \texttt{LD\_PRELOAD}-Umgebungsvariable bei setuid-Binaries, sondern ignoriert diese lediglich.
+Sie wird also trotzdem an Kindprozesse weitergegeben.
+Voraussetzung ist nur, dass die echte UID mit der effektiven UID übereinstimmt\footnote{\url{https://github.com/esmil/musl/blob/master/src/ldso/dynlink.c\#L1121-L1123}}, dafür sorgt Zeile 14.
+Eine korrekte Implementierung würde den Code in Zeile~14 erst nach erfolgreichem Login in Zeile~42 durchführen.

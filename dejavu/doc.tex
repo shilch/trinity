@@ -1,0 +1,80 @@
+\subsection{Privilege Escalation via Deja Vu}
+Der Benutzer \texttt{dev} hat Zugriff auf das Verzeichnis \texttt{/opt/dejavu}, aus dem bereits im Screenshot von Agent Smith eine Datei geöffnet war.
+
+In dem Verzeichnis findet sich ein Interpreter für die Deja Vu Programmiersprache, welche die Maschinen zur Programmierung von künstlicher Intelligenz einsetzen -- zurzeit jedoch nur in Katzenprogrammen, wie in der beiliegenden \texttt{README.md} angemerkt wird.
+
+\begin{lstlisting}
+dr-xr-x---    1 dev      dev           4096 Jul  4 10:22 .
+drwxr-xr-x    1 root     root          4096 Jul  4 10:22 ..
+-r--r-----    1 dev      dev           1657 Jun 30 09:20 README.md
+-r-xr-x---    1 dev      dev        2034928 Jul  4 10:21 dejavu
+dr-xr-x---    1 dev      dev           4096 Jul  4 10:22 examples
+-r--r-----    1 dev      dev           4980 Jul  3 09:58 main.go
+\end{lstlisting}
+
+Ferner enthält die \texttt{README.md} eine kurze Übersicht der erlaubten Instruktionen sowie einen Verweis auf Beispiel-Skripts im \texttt{examples}-Verzeichnis.
+Bei Deja Vu handelt es sich um eine Abwandlung der esoterischen Programmiersprache Brainfuck bzw. deren Variante \href{https://de.wikipedia.org/wiki/Ook!}{Ook!}
+
+Nach einem kurzen Blick in den ebenfalls beiliegenden Quellcode kann festgestellt werden, dass eine weitere, undokumentierte Instruktion unterstützt wird, welche das Ausführen externer Programme ermöglicht; jedoch erschließt sich ein möglicher Angriff erstmal nicht, denn der Interpreter ist keine setuid-Binary, wird also ganz normal als Benutzer \texttt{dev} ausgeführt.
+Jedoch findet man nach ausführlicher Untersuchung heraus, dass die Interpreter-Binary die Linux~Capability \texttt{CAP\_SETFCAP} über die erweiterten Dateisystem-Attribute gesetzt hat, darauf gab es bereits in der TODO-Liste im Screenshot einen Hinweis.
+
+\begin{lstlisting}
+$ getcap dejavu
+dejavu cap_setfcap=eip
+\end{lstlisting}
+
+Die \texttt{CAP\_SETFCAP}-Capability erlaubt dem ausgeführten Interpreter-Prozess beliebiges Setzen weiterer Capabilities im Dateisystem.
+Mehrere Wege führen hier zum Ziel, in diesem Walkthrough wird die \texttt{CAP\_DAC\_OVERRIDE}-Capability der \texttt{/bin/busybox} zugewiesen, wodurch für alle Busybox-Tools wie \texttt{ls} oder \texttt{cat} die Rechteüberprüfung auf Dateisystemebene deaktiviert wird.
+
+Normalerweise würde ein Administrator dazu folgenden Befehl ausführen:
+\begin{lstlisting}
+$ /usr/sbin/setcap cap_dac_override+eip /bin/busybox
+unable to set CAP_SETFCAP effective capability: Operation not permitted
+\end{lstlisting}
+
+Mit dem passenden DejaVu-Skript sollte dieser Befehl aber erfolgreich ausgeführt werden.
+Dieses Skript wird am besten automatisiert generiert, denn die undokumentierte Instruktion (\texttt{Deja? Vu?}) zum Ausführen eines Programms erfordert, dass die Zelleninhalte relativ zum Zeiger in einer bestimmten Struktur vorliegen.
+Demnach steht in der ersten Zelle die Länge des ersten Zeichenkette, gefolgt von dieser Zeichenkette (pro Zelle ein Byte).
+In der nächsten Zelle steht dann die Länge der zweiten Zeichenkette, gefolgt von der zweiten Zeichenkette.
+Die Argumentliste terminiert bei einer 0.
+
+\begin{figure}[!ht]
+\centering
+\begin{tikzpicture}
+\matrix[
+    matrix of nodes,
+    every node/.style={
+        draw,
+        anchor=center,
+        minimum height=20pt,
+        minimum width=20pt,
+        text=blue
+    }
+]{
+    \strut \color{red}9 & \strut / & \strut b & \strut i & \strut n & \strut / & \strut e & \strut c & \strut h & \strut o &
+    \strut \color{red}5 & \strut H & \strut a & \strut l & \strut l & \strut o &
+    \strut \color{red}0 \\
+};
+\end{tikzpicture}
+\caption{Struktur der Zellen mit \texttt{/bin/echo Hallo} als Beispiel}
+\end{figure}
+
+Der folgende JavaScript-Code generiert ein DejaVu-Skript, welches den gewünschten \texttt{setcap}-Befehl korrekt in die Zellen organisiert und die undokumentierte Instruktion ausführt:
+
+\lstinputlisting[language=JavaScript]{dejavu/buildDejavu.js}
+
+Es wird ein ca.~50000-Zeichen langes DejaVu-Skript generiert, welches anschließend auf die Maschine als \texttt{/tmp/exploit.dv} kopiert und mit dem Interpreter ausgeführt werden kann:
+
+\begin{lstlisting}
+$ whoami
+dev
+$ ls /root
+ls: can't open '/root': Permission denied
+$ ./dejavu /tmp/exploit.dv
+$ whoami
+dev
+$ ls /root
+token.txt
+$ cat /root/token.txt
+HC2021{WhoEvenNeedsRootWhenThereAreCaps}
+\end{lstlisting}

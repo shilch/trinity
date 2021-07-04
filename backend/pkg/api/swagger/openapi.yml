@@ -1,0 +1,131 @@
+openapi: 3.0.0
+info:
+  description: "This is the documentation of the Matrix Power Grid Inc. User API"
+  version: 1.0.0
+  title: Matrix Power Grid Inc. User API
+paths:
+  /login:
+    post:
+      summary: Log the user in
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+              required:
+                - username
+                - password
+      responses:
+        "200":
+          description: Login successful; Cookie set
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: MATRIXSESSION=abcde12345; Path=/; HttpOnly
+        "401":
+          description: An error message indicating if the username or password is wrong
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+
+  "/user":
+    get:
+      summary: Show user information
+      operationId: showUserInfo
+      responses:
+        "200":
+          description: The currently authenticated user
+      security:
+        - matrix_session: []
+  "/user/{username}":
+    put:
+      summary: Change display name
+      operationId: changeDisplayName
+      responses:
+        "200":
+          description: Change successful; cookie changed
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: MATRIXSESSION=abcde12345; Path=/; HttpOnly
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                display_name:
+                  description: New Display Name
+                  type: string
+              required:
+                - display_name
+      security:
+        - matrix_session: []
+      parameters:
+        - in: path
+          name: username
+          description: Username
+          schema:
+            type: string
+          required: true
+  "/grids":
+    get:
+      summary: Grid power information
+      description: Get current information of the power grid
+      operationId: getGrids
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Grids"
+      security:
+        - matrix_session: []
+servers:
+  - url: http://localhost:8080/api/v1
+components:
+  securitySchemes:
+    matrix_session:
+      type: apiKey
+      in: cookie
+      description: |
+        JWT-like token signed with our very secure™ BCRYPT-based HMAC.  
+        HMAC_k(m) = BCRYPT(k || m) where k is the private server SECRET.
+      name: MATRIXSESSION 
+  schemas:
+    ErrorMessage:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Error message
+    Grids:
+      type: array
+      items:  
+        $ref: '#/components/schemas/Grid'
+    Grid:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        power:
+          type: integer
+          format: int64
+        online:
+          type: boolean
+    

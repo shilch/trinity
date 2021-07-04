@@ -1,0 +1,12 @@
+.idea/
+/doc*
+!doc.tex
+!doc.pdf
+/cheatsheet*
+!cheatsheet.tex
+!cheatsheet.pdf
+/quickstart*
+!quickstart.tex
+!quickstart.pdf
+/svg-inkscape
+__latexindent*

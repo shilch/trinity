@@ -1,0 +1,68 @@
+\documentclass[
+    parskip=half
+]{scrartcl}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage{fontspec}
+\setmainfont{VT323}
+
+\usepackage[
+    top=15mm,
+    left=25mm,
+    right=25mm,
+    bottom=15mm
+]{geometry}
+
+\usepackage[ngerman]{babel}
+\usepackage[babel,german=quotes]{csquotes}
+\usepackage{tabularx}
+\usepackage{xltabular}
+\usepackage[table,xcdraw]{xcolor}
+\usepackage{graphicx}
+\usepackage{svg}
+\usepackage{datetime}
+\usepackage{multirow}
+\usepackage[hidelinks]{hyperref}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepackage{wrapfig}
+\usepackage{pgfplotstable}
+\usetikzlibrary{positioning,matrix,calc,shapes.misc}
+\usepackage{comment}
+\usepackage[german]{varioref}
+\usepackage[german]{cleveref}
+\usepackage[shortlabels]{enumitem}
+\usepackage{booktabs}
+\usepackage{suffix}
+\usepackage{multicol}
+\usepackage{xparse}
+\usepackage{pdflscape}
+\usepackage{scrlayer-scrpage}
+\clearpairofpagestyles
+
+\definecolor{matrixgreen}{HTML}{008F11}
+\let\originalhref\href
+\renewcommand\href[2]{\originalhref{#1}{\color{blue!50!matrixgreen}{#2}}}%
+
+\begin{document}%
+\tikz[overlay,remember picture,inner sep=0mm]{
+    \node[fill=black,minimum width=\paperwidth,minimum height=\paperheight] at (current page.center) {};
+}%
+\color{matrixgreen}%
+\begin{center}
+\Huge QUICKSTART\\
+\huge Linux Privilege Escalation -- Challenge \enquote{Trinity}\\
+\small präsentiert von Konrad Langenberg, Jonas Franz und Simon Hilchenbach
+\end{center}
+\vspace*{8mm}
+\raggedright%
+\LARGE\input{story.tex}\\
+\vspace*{12mm}%
+Ausführen der Challenge:\\
+{\small docker run {-}\kern0mm\relax{-}rm {-}\kern0mm\relax{-}name trinity registry.code.fbi.h-da.de/hc/trinity}\\
+\vspace*{4mm}%
+Abfrage der IP-Adresse des Containers:\\
+{\small docker inspect -f '\{\{range.NetworkSettings.Networks\}\}\{\{.IPAddress\}\}\{\{end\}\}' trinity}\\
+\end{document}
